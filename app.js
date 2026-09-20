@@ -39,6 +39,7 @@ let state = initialState(),
   filter = 'all',
   showAll = false,
   modalVersion = 0,
+  activeCharterMatchId = null,
   saving = false,
   previewURL = null,
   toastTimer;
@@ -178,8 +179,26 @@ async function loadState(announce) {
     const next = await api('state', undefined, { timeout: 15_000 });
     if (!state || next.version >= state.version) {
       const changed = !state || next.version !== state.version;
+      const prevMatches = state?.matches;
       state = next;
-      if (changed) render();
+      if (changed) {
+        render();
+        if (activeCharterMatchId && modal.open) {
+          const m = fixtures(state).find((item) => item.id === activeCharterMatchId);
+          if (m) {
+            const prevM = prevMatches?.find((item) => item.id === activeCharterMatchId);
+            const wasBothAccepted = Boolean(prevM?.acceptedA && prevM?.acceptedB);
+            const isBothAccepted = Boolean(m.acceptedA && m.acceptedB);
+            if (isBothAccepted && !wasBothAccepted) {
+              toast('Both players agreed! Scoreboard upload unlocked.');
+              feedback('saved');
+              uploadModal(activeCharterMatchId);
+            } else if (JSON.stringify(prevM) !== JSON.stringify(m)) {
+              matchDetailModal(activeCharterMatchId);
+            }
+          }
+        }
+      }
     }
     $('#connection-status').innerHTML =
       `<span class="status-dot"></span>${state.mode === 'local' ? 'Local preview' : 'Connected to the league'} · Checked ${escape(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}`;
@@ -339,6 +358,7 @@ function releasePreview() {
 }
 function closeModal() {
   if (saving) return;
+  activeCharterMatchId = null;
   modalVersion++;
   const closing = hideSheet(modal);
   releasePreview();
@@ -789,10 +809,11 @@ function matchDetailModal(id) {
     evidenceModal(id);
     return;
   }
+  activeCharterMatchId = id;
   const bothAccepted = Boolean(m.acceptedA && m.acceptedB);
   openModal(
     'YOUR NEXT MATCH.',
-    `<div class="pending-detail"><div class="hub-versus"><div>${avatar(m.playerA)}<strong>${escape(names(m.playerA))}</strong></div><span>vs</span><div>${avatar(m.playerB)}<strong>${escape(names(m.playerB))}</strong></div></div><span class="pill">${m.status === 'queued' ? 'QUEUED' : 'STILL TO PLAY'}</span><p>One official match between these players. Both must enter their PIN to unlock posting.</p>${bothAccepted ? `<button class="button button-dark" data-action="upload" data-pair="${escape(id)}">Post this match ${icon('upload')}</button>` : `<div class="charter-locked-notice">${icon('lock')} <span>Both players must enter their PIN below before results can be posted.</span></div>`}</div><div class="charter-accept-section"><div class="charter-accept-header"><span class="charter-accept-icon">${icon('crown')}</span><h3>MATCH CHARTER</h3><p>No rematch. No replay for connection issues. The final scoreboard is the record.</p></div>${bothAccepted ? `<div class="charter-both-agreed"><span class="charter-agreed-badge">${icon('check')} BOTH PLAYERS AGREED</span><small>Player A: ${new Date(m.acceptedA).toLocaleDateString()} · Player B: ${new Date(m.acceptedB).toLocaleDateString()}</small></div>` : `<div class="charter-slots-accept">${charterSlotHtml(m.playerA, m.acceptedA, 'A')}${charterSlotHtml(m.playerB, m.acceptedB, 'B')}</div><p class="fine-print">Each player enters their private 6-digit PIN. To view or generate your unique PIN, tap your name in <strong>Standings</strong>. PINs automatically cycle each match for privacy.</p>`}</div>`,
+    `<div class="pending-detail"><div class="hub-versus"><div>${avatar(m.playerA)}<strong>${escape(names(m.playerA))}</strong></div><span>vs</span><div>${avatar(m.playerB)}<strong>${escape(names(m.playerB))}</strong></div></div><span class="pill">${m.status === 'queued' ? 'QUEUED' : 'STILL TO PLAY'}</span><p>One official match between these players. Both must enter their PIN to unlock posting.</p>${bothAccepted ? `<button class="button button-dark" data-action="upload" data-pair="${escape(id)}">Post this match ${icon('upload')}</button>` : `<div class="charter-locked-notice">${icon('lock')} <span>Both players must enter their PIN below before results can be posted.</span></div>`}</div><div class="charter-accept-section"><div class="charter-accept-header"><span class="charter-accept-icon">${icon('crown')}</span><h3>MATCH CHARTER</h3><p>No rematch. No replay for connection issues. The final scoreboard is the record.</p></div>${bothAccepted ? `<div class="charter-both-agreed"><span class="charter-agreed-badge">${icon('check')} BOTH PLAYERS AGREED</span><p style="font-size:13px;color:#a5d6a7;margin:4px 0 12px;font-weight:600;">Match charter verified by both players. Posting unlocked!</p><small>Player A: ${new Date(m.acceptedA).toLocaleDateString()} · Player B: ${new Date(m.acceptedB).toLocaleDateString()}</small><button class="button button-dark charter-unlocked-cta" data-action="upload" data-pair="${escape(id)}">Upload scoreboard result now ${icon('upload')}</button></div>` : `<div class="charter-slots-accept">${charterSlotHtml(m.playerA, m.acceptedA, 'A')}${charterSlotHtml(m.playerB, m.acceptedB, 'B')}</div><p class="fine-print">Each player enters their private 6-digit PIN. To view or generate your unique PIN, tap your name in <strong>Standings</strong>. PINs automatically cycle each match for privacy.</p>`}</div>`,
     'ONE MATCH PER PAIR',
   );
   content.querySelectorAll('.charter-pin-form').forEach((form) => {
@@ -838,8 +859,14 @@ function matchDetailModal(id) {
         await refresh(false, true);
         setSaving(false);
         feedback('saved');
-        matchDetailModal(id);
-        toast('Charter accepted.');
+        const updated = fixtures(state).find((item) => item.id === id);
+        if (updated && updated.acceptedA && updated.acceptedB) {
+          toast('Both players agreed! Scoreboard upload unlocked.');
+          uploadModal(id);
+        } else {
+          matchDetailModal(id);
+          toast('PIN verified. Awaiting opponent agreement.');
+        }
       } catch (err) {
         setSaving(false);
         formError(form, err.message);
@@ -1128,6 +1155,7 @@ document.addEventListener('click', async (e) => {
 });
 $('#modal-close').addEventListener('click', closeModal);
 modal.addEventListener('close', () => {
+  activeCharterMatchId = null;
   modalVersion++;
   releasePreview();
 });
@@ -1266,6 +1294,14 @@ setupBattleAudio();
 setupLobby();
 setupSoundtrack();
 void refresh();
-setInterval(() => {
-  if (!document.hidden && !saving) void refresh();
-}, 5_000);
+function scheduleNextPoll() {
+  const delay = activeCharterMatchId && modal.open ? 1500 : 5000;
+  setTimeout(() => {
+    if (!document.hidden && !saving) {
+      void refresh().finally(scheduleNextPoll);
+    } else {
+      scheduleNextPoll();
+    }
+  }, delay);
+}
+scheduleNextPoll();
