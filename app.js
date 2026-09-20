@@ -697,6 +697,19 @@ function playerDetailModal(id) {
   if (!player) return;
   const rawPlayer = state.players.find((p) => p.id === id);
   const opponents = remainingOpponents(state, id);
+  const myPlayerId = state.myPlayerId;
+  const isMine = rawPlayer?.isMyPlayer || (!myPlayerId && rawPlayer?.pinOwned && !rawPlayer?.claimedByOther);
+  const myPlayerName = myPlayerId ? names(myPlayerId) : null;
+
+  let pinActionHtml = '';
+  if (isMine) {
+    pinActionHtml = `<div class="player-pin-actions"><button class="button button-dark button-sm pin-reset-btn" id="get-pin-btn">${icon('lock')} View My Active PIN</button><button class="text-link" id="reset-pin-btn" style="font-size: 11px; margin-top: 6px;">Generate New PIN</button></div>`;
+  } else if (myPlayerId && myPlayerId !== id) {
+    pinActionHtml = `<p class="fine-print" style="color: #f3b218;">${icon('lock')} Your device is registered as <strong>${escape(myPlayerName)}</strong>. You can only view and manage your own PIN.</p>`;
+  } else {
+    pinActionHtml = `<p class="fine-print" style="color: #f87171;">${icon('lock')} PIN already generated for this player. Contact admin if this is your name.</p>`;
+  }
+
   openModal(
     names(id),
     `<div class="player-detail-sheet">${avatar(id)}<div class="player-detail-rank">${player.rank ? 'Rank ' + player.rank : 'Yet to play'} · ${player.points} points</div><div class="rank-detail"><dl><div><dt>Played</dt><dd>${player.played}</dd></div><div><dt>Wins</dt><dd>${player.wins}</dd></div><div><dt>Losses</dt><dd>${player.losses}</dd></div><div><dt>Difference</dt><dd>${player.diff > 0 ? '+' : ''}${player.diff}</dd></div></dl><p>Scores: ${player.for} for · ${player.against} against</p><p>Recent form: ${
@@ -706,7 +719,7 @@ function playerDetailModal(id) {
             .map((f) => (f === 'W' ? 'Win' : 'Loss'))
             .join(' · ')
         : 'No results yet'
-    }</p></div><h3>Still to play</h3><p>${opponents.length ? opponents.map((p) => escape(p.name)).join(' · ') : 'Every opponent played.'}</p><button class="button button-dark" data-action="reminder" data-player="${escape(id)}">Copy a match reminder ${icon('copy')}</button>${rawPlayer?.pinOwned ? `<div class="player-pin-actions"><button class="button button-dark button-sm pin-reset-btn" id="get-pin-btn">${icon('lock')} View My Active PIN</button><button class="text-link" id="reset-pin-btn" style="font-size: 11px; margin-top: 6px;">Generate New PIN</button></div>` : `<p class="fine-print">${icon('lock')} This player's PIN is bound to their personal device.</p>`}</div>`,
+    }</p></div><h3>Still to play</h3><p>${opponents.length ? opponents.map((p) => escape(p.name)).join(' · ') : 'Every opponent played.'}</p><button class="button button-dark" data-action="reminder" data-player="${escape(id)}">Copy a match reminder ${icon('copy')}</button>${pinActionHtml}</div>`,
     'PLAYER RECORD',
   );
   const getBtn = document.getElementById('get-pin-btn');

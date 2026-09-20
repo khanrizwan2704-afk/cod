@@ -133,14 +133,23 @@ export function createService({
     throw new Problem('Wait a moment and retry.', 429);
   }
   function publicState(s, owner) {
+    const claimedPlayer = s.players.find((p) => p.pinOwner && p.pinOwner === owner);
+    const myPlayerId = claimedPlayer ? claimedPlayer.id : null;
     return {
       ...s,
       mode,
-      players: s.players.map(({ pinHash, pinOwner, ...p }) => ({
-        ...p,
-        pinOwned: pinOwner ? pinOwner === owner : true,
-        pinClaimed: Boolean(pinOwner),
-      })),
+      myPlayerId,
+      players: s.players.map(({ pinHash, pinOwner, ...p }) => {
+        const isMine = pinOwner ? pinOwner === owner : false;
+        const isClaimedByOther = pinOwner ? pinOwner !== owner : false;
+        return {
+          ...p,
+          pinOwned: isMine || (!myPlayerId && !pinOwner),
+          isMyPlayer: isMine,
+          pinClaimed: Boolean(pinOwner),
+          claimedByOther: isClaimedByOther,
+        };
+      }),
       matches: s.matches.map(({ submissionKey, submissionDigest, ...m }) => ({
         ...m,
         acceptedA: m.acceptedA || null,
@@ -654,9 +663,17 @@ export function createService({
       const { data } = await current();
       const player = data.players.find((p) => p.id === playerId);
       assert(player, 'Player not found.', 404);
+      
+      const existingClaim = data.players.find((p) => p.pinOwner && p.pinOwner === owner);
+      if (existingClaim && existingClaim.id !== playerId) {
+        throw new Problem(
+          `Your device is already registered as ${existingClaim.name}. You can only manage your own PIN.`,
+          403,
+        );
+      }
       assert(
         !player.pinOwner || player.pinOwner === owner,
-        'This player has been claimed by another device. Only their device can view or reset their PIN.',
+        'PIN already generated for this player. Please contact admin if this is your name.',
         403,
       );
       // If player already has an active generated PIN and owner just wants to see it again (not force-reset)
@@ -666,11 +683,18 @@ export function createService({
       const newPin = String(Math.floor(100000 + Math.random() * 900000));
       const newHash = digest(playerId + ':' + newPin);
       await mutate((s) => {
+        const claim = s.players.find((p) => p.pinOwner && p.pinOwner === owner);
+        if (claim && claim.id !== playerId) {
+          throw new Problem(
+            `Your device is already registered as ${claim.name}. You can only manage your own PIN.`,
+            403,
+          );
+        }
         const p = s.players.find((pp) => pp.id === playerId);
         assert(p, 'Player not found.', 404);
         assert(
           !p.pinOwner || p.pinOwner === owner,
-          'This player has been claimed by another device.',
+          'PIN already generated for this player. Please contact admin if this is your name.',
           403,
         );
         p.pinHash = newHash;

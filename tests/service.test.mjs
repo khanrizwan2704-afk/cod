@@ -341,6 +341,40 @@ test('cross-site and oversized mutations fail before writing', async () => {
   );
   assert.equal((await (await c()).json()).players.length, 7);
 });
+test('PIN generation binds to a single player per device and blocks claiming others', async () => {
+  const { client } = setup(),
+    deviceA = client('a'.repeat(64)),
+    deviceB = client('b'.repeat(64));
+
+  // Device A generates PIN for fiercekhan
+  const res1 = await deviceA('reveal-pin', { playerId: 'fiercekhan' });
+  assert.equal(res1.status, 200);
+  const data1 = await res1.json();
+  assert.equal(typeof data1.pin, 'string');
+  assert.equal(data1.pin.length, 6);
+
+  // Device A can re-view fiercekhan's active PIN
+  const resView = await deviceA('reveal-pin', { playerId: 'fiercekhan' });
+  assert.equal(resView.status, 200);
+  const dataView = await resView.json();
+  assert.equal(dataView.pin, data1.pin);
+
+  // Device A attempts to claim or generate PIN for bowdownbro -> blocked
+  const resAOther = await deviceA('reveal-pin', { playerId: 'bowdownbro' });
+  assert.equal(resAOther.status, 403);
+  const errAOther = await resAOther.json();
+  assert.match(errAOther.error, /Your device is already registered as/);
+
+  // Device B attempts to generate/reveal fiercekhan -> blocked
+  const resBClaim = await deviceB('reveal-pin', { playerId: 'fiercekhan' });
+  assert.equal(resBClaim.status, 403);
+  const errBClaim = await resBClaim.json();
+  assert.match(errBClaim.error, /PIN already generated for this player/);
+
+  // Device B can generate PIN for bowdownbro
+  const res2 = await deviceB('reveal-pin', { playerId: 'bowdownbro' });
+  assert.equal(res2.status, 200);
+});
 test('range parsing handles suffixes and rejects invalid/out-of-bounds requests', () => {
   assert.deepEqual(parseRange('bytes=-10', 100), {
     start: 90,
