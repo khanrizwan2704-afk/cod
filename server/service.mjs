@@ -148,6 +148,7 @@ export function createService({
           isMyPlayer: isMine,
           pinClaimed: Boolean(pinOwner),
           claimedByOther: isClaimedByOther,
+          myPin: isMine ? (p.lastGeneratedPin || null) : undefined,
         };
       }),
       matches: s.matches.map(({ submissionKey, submissionDigest, ...m }) => ({

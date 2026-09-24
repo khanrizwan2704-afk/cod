@@ -257,11 +257,16 @@ function render() {
   $('#standings-note').textContent = summary.disputes
     ? `${summary.disputes} open concern(s). Standings are provisional; the final crown is held.`
     : 'Points → score difference → scores for → head-to-head for a two-way tie. Equal records share a rank.';
+  const uncompleted = fixtures(state).filter((m) => m.status !== 'completed');
+  const waitingForOpponent = uncompleted.find(
+    (m) => (m.acceptedA && !m.acceptedB) || (!m.acceptedA && m.acceptedB),
+  );
   const next =
-    fixtures(state).find((m) => m.status === 'queued') ||
-    fixtures(state).find((m) => m.status !== 'completed');
+    waitingForOpponent ||
+    uncompleted.find((m) => m.status === 'queued') ||
+    uncompleted[0];
   $('#next-match').innerHTML = next
-    ? `<span class="eyebrow">${next.status === 'queued' ? 'QUEUED TO PLAY' : 'A MATCH STILL TO PLAY'}</span><h3>THE NEXT MOVE<br />IS YOURS.</h3><div class="next-pair">${escape(names(next.playerA))}<span>VERSUS</span>${escape(names(next.playerB))}</div><p class="next-note">Arrange a time together. Post the final scoreboard when you're done.</p><button class="button button-dark" data-action="upload" data-pair="${escape(next.id)}">Post this result ${icon('arrow-up-right')}</button>`
+    ? `<span class="eyebrow">${waitingForOpponent === next ? 'WAITING FOR OPPONENT PIN' : next.status === 'queued' ? 'QUEUED TO PLAY' : 'A MATCH STILL TO PLAY'}</span><h3>THE NEXT MOVE<br />IS YOURS.</h3><div class="next-pair">${escape(names(next.playerA))}<span>VERSUS</span>${escape(names(next.playerB))}</div><p class="next-note">${waitingForOpponent === next ? 'One player has accepted the charter. Opponent must enter their PIN to unlock posting.' : 'Arrange a time together. Both enter PIN to accept charter and post scoreboard.'}</p><button class="button button-dark" data-action="${next.acceptedA && next.acceptedB ? 'upload' : 'match-detail'}" data-pair="${escape(next.id)}">${next.acceptedA && next.acceptedB ? 'Post this result' : 'Enter PIN / Accept'} ${icon('arrow-up-right')}</button>`
     : `<span class="eyebrow">ALL MATCHUPS COMPLETE</span><h3>THAT'S A<br />SEASON.</h3><p class="next-note">${summary.disputes ? 'Review the reported concerns in the matchboard.' : 'Every pair has played. Relive the moments in the highlights.'}</p><a class="button button-dark" href="#clips">Watch the highlights ${icon('play')}</a>`;
   const playerFilter = $('#player-filter'),
     selected = playerFilter.value;
@@ -278,6 +283,7 @@ function render() {
   renderPhone(state, { escape, avatar, names });
   renderPlayers();
   renderClips();
+  renderSettingsPin();
   const crown = $('#crown-card');
   crown.classList.toggle('crowned', summary.champions.length > 0);
   crown.innerHTML = `<div class="crown-emblem">${icon('crown')}</div><span class="eyebrow">${summary.champions.length ? (summary.champions.length > 1 ? 'SHARED SEASON CHAMPIONS' : 'YOUR SEASON CHAMPION') : 'THE FINAL WORD'}</span><h2>${summary.champions.length ? summary.champions.map((p) => escape(p.name)).join(' &amp; ') : summary.disputes ? 'A FAIR FINISH COMES FIRST.' : 'A CROWN TO BE EARNED.'}</h2><p>${summary.champions.length ? 'Every matchup played. Every point earned from the posted results.' : summary.disputes ? 'Reported concerns must be withdrawn by their reporters before the crown can be awarded. Evidence stays open for everyone to review.' : 'The season winner appears when every matchup has a result. Until then, there is everything to play for.'}</p><span class="pill">${summary.champions.length ? icon('check') + ' SEASON COMPLETE' : summary.completed + ' / ' + summary.total + ' MATCHUPS COMPLETED'}</span>`;
@@ -286,20 +292,47 @@ function renderMatches() {
   if (!state) return;
   const player = $('#player-filter').value;
   $('#filter-summary').textContent = player ? names(player) : 'Filter matches';
-  const matches = fixtures(state).filter(
-    (m) =>
-      (filter === 'all' ||
-        (filter === 'completed'
-          ? m.status === 'completed'
-          : m.status !== 'completed')) &&
-      (!player || [m.playerA, m.playerB].includes(player)),
-  );
+  const matches = fixtures(state)
+    .filter(
+      (m) =>
+        (filter === 'all' ||
+          (filter === 'completed'
+            ? m.status === 'completed'
+            : m.status !== 'completed')) &&
+        (!player || [m.playerA, m.playerB].includes(player)),
+    )
+    .sort((a, b) => {
+      // Prioritize uncompleted matches waiting for 2nd PIN
+      const aWaiting = a.status !== 'completed' && ((a.acceptedA && !a.acceptedB) || (!a.acceptedA && a.acceptedB));
+      const bWaiting = b.status !== 'completed' && ((b.acceptedA && !b.acceptedB) || (!b.acceptedA && b.acceptedB));
+      if (aWaiting && !bWaiting) return -1;
+      if (!aWaiting && bWaiting) return 1;
+      const aBoth = a.status !== 'completed' && a.acceptedA && a.acceptedB;
+      const bBoth = b.status !== 'completed' && b.acceptedA && b.acceptedB;
+      if (aBoth && !bBoth) return -1;
+      if (!aBoth && bBoth) return 1;
+      return 0;
+    });
   $('#match-grid').innerHTML =
     (showAll ? matches : matches.slice(0, 6))
       .map((m) => {
         const done = m.status === 'completed',
-          flagged = m.reports?.length;
-        return `<article class="match-card"><div class="match-card-top"><button class="match-detail-link" data-action="match-detail" data-pair="${escape(m.id)}">Match details ${icon('chevron-down')}</button><span class="match-status ${flagged ? 'flagged' : done ? 'done' : ''}">${icon(flagged ? 'flag' : done ? 'check' : 'clock')}${flagged ? 'CONCERN REPORTED' : done ? 'COMPLETED' : m.status === 'queued' ? 'QUEUED' : 'TO PLAY'}</span></div><div class="match-players">${[m.playerA, m.playerB].map((id, i) => `<div class="match-player ${done && (i ? m.scoreB > m.scoreA : m.scoreA > m.scoreB) ? 'winner' : ''}">${avatar(id)}<span>${escape(names(id))}</span><strong>${done ? (i ? m.scoreB : m.scoreA) : '—'}</strong></div>`).join('')}</div><div class="match-card-bottom"><small>${done ? escape(m.map || 'Final result') + ' · ' + date(m.completedAt) : 'Awaiting a final scoreboard'}</small><button class="text-link" data-action="${done ? 'evidence' : 'upload'}" data-pair="${escape(m.id)}">${done ? 'View result' : 'Post result'} ${icon('arrow-up-right')}</button></div></article>`;
+          flagged = m.reports?.length,
+          bothAgreed = !done && m.acceptedA && m.acceptedB,
+          halfAgreed = !done && ((m.acceptedA && !m.acceptedB) || (!m.acceptedA && m.acceptedB));
+        const statusLabel = flagged
+          ? 'CONCERN REPORTED'
+          : done
+            ? 'COMPLETED'
+            : bothAgreed
+              ? 'READY TO POST'
+              : halfAgreed
+                ? 'WAITING OPPONENT'
+                : m.status === 'queued'
+                  ? 'QUEUED'
+                  : 'TO PLAY';
+        const statusClass = flagged ? 'flagged' : done ? 'done' : bothAgreed ? 'both-agreed' : halfAgreed ? 'half-agreed' : '';
+        return `<article class="match-card ${halfAgreed ? 'card-waiting-opponent' : ''}"><div class="match-card-top"><button class="match-detail-link" data-action="match-detail" data-pair="${escape(m.id)}">Match details ${icon('chevron-down')}</button><span class="match-status ${statusClass}">${icon(flagged ? 'flag' : done ? 'check' : halfAgreed ? 'clock' : 'clock')}${statusLabel}</span></div><div class="match-players">${[m.playerA, m.playerB].map((id, i) => `<div class="match-player ${done && (i ? m.scoreB > m.scoreA : m.scoreA > m.scoreB) ? 'winner' : ''}">${avatar(id)}<span>${escape(names(id))}</span><strong>${done ? (i ? m.scoreB : m.scoreA) : '—'}</strong></div>`).join('')}</div><div class="match-card-bottom"><small>${done ? escape(m.map || 'Final result') + ' · ' + date(m.completedAt) : halfAgreed ? '1 player accepted · waiting for opponent' : bothAgreed ? 'Both players accepted charter' : 'Awaiting a final scoreboard'}</small><button class="text-link" data-action="${done ? 'evidence' : 'upload'}" data-pair="${escape(m.id)}">${done ? 'View result' : bothAgreed ? 'Post result' : 'Enter PIN'} ${icon('arrow-up-right')}</button></div></article>`;
       })
       .join('') ||
     '<div class="empty-card">No matchups in this view yet.</div>';
@@ -794,13 +827,19 @@ function filtersModal() {
 function charterSlotHtml(playerId, accepted, side) {
   const playerName = escape(names(playerId));
   if (accepted) {
-    return `<div class="charter-slot charter-accepted"><span class="charter-slot-check">${icon('check')}</span><strong>${playerName}</strong><small>Accepted ${new Date(accepted).toLocaleDateString()}</small></div>`;
+    return `<div class="charter-slot charter-accepted"><span class="charter-slot-check">${icon('check')}</span><strong>${playerName}</strong><small>Accepted ${new Date(accepted).toLocaleDateString()}</small><span class="pill" style="font-size:10px;color:#4caf50;border-color:rgba(76,175,80,0.3);margin-top:4px;">LOCKED IN</span></div>`;
+  }
+  const myPlayerId = state?.myPlayerId;
+  const isOpponentSlot = myPlayerId && myPlayerId !== playerId;
+  if (isOpponentSlot) {
+    return `<div class="charter-slot charter-pending charter-opponent-locked"><strong>${playerName}</strong><small>Opponent device required</small><div class="opponent-lock-badge" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px dashed rgba(255,255,255,0.15);font-size:11px;color:#aaa;margin-top:6px;">${icon('lock')} <span>Awaiting PIN on ${playerName}'s phone</span></div></div>`;
   }
   let savedPin = '';
   try {
-    savedPin = localStorage.getItem('player-pin-' + playerId) || '';
+    const rawPl = state?.players?.find((p) => p.id === playerId);
+    savedPin = rawPl?.myPin || localStorage.getItem('player-pin-' + playerId) || '';
   } catch {}
-  return `<div class="charter-slot charter-pending"><strong>${playerName}</strong><small>Awaiting acceptance</small><form class="charter-pin-form" data-player="${escape(playerId)}" data-side="${side}"><div class="pin-input-wrap"><input class="pin-input" name="pin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" placeholder="6-digit PIN" value="${savedPin}" autocomplete="off" required aria-label="Enter ${playerName}'s PIN" />${savedPin ? `<button type="button" class="pin-quick-btn auto-fill-pin" title="Use saved PIN">${icon('check')}</button>` : `<button type="button" class="pin-quick-btn paste-pin" title="Paste PIN">${icon('copy')}</button>`}</div><button class="button button-dark button-sm" type="submit">Accept ${icon('lock')}</button>${errorMarkup()}</form></div>`;
+  return `<div class="charter-slot charter-pending"><strong>${playerName}</strong><small>Enter your 6-digit PIN</small><form class="charter-pin-form" data-player="${escape(playerId)}" data-side="${side}"><div class="pin-input-wrap"><input class="pin-input" name="pin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" placeholder="6-digit PIN" value="${savedPin}" autocomplete="off" required aria-label="Enter ${playerName}'s PIN" />${savedPin ? `<button type="button" class="pin-quick-btn auto-fill-pin" title="Use saved PIN">${icon('check')}</button>` : `<button type="button" class="pin-quick-btn paste-pin" title="Paste PIN">${icon('copy')}</button>`}</div><button class="button button-dark button-sm" type="submit">Accept ${icon('lock')}</button>${errorMarkup()}</form></div>`;
 }
 function matchDetailModal(id) {
   const m = fixtures(state).find((m) => m.id === id);
@@ -1181,6 +1220,93 @@ modal.addEventListener('click', (e) => {
       closeModal();
   }
 });
+function renderSettingsPin() {
+  const panel = $('#settings-pin-panel');
+  if (!panel || !state) return;
+  const badge = $('#settings-pin-player-badge');
+  const display = $('#settings-pin-display');
+  const copyBtn = $('#btn-settings-copy-pin');
+  const newPinBtn = $('#btn-settings-new-pin');
+  const myPlayerId = state.myPlayerId;
+  const myPlayer = state.players?.find((p) => p.isMyPlayer || p.id === myPlayerId);
+
+  let activePin = myPlayer?.myPin || '';
+  if (!activePin && myPlayerId) {
+    try {
+      activePin = localStorage.getItem('player-pin-' + myPlayerId) || '';
+    } catch {}
+  }
+
+  if (myPlayer) {
+    badge.textContent = myPlayer.name;
+    badge.style.color = '#f3b218';
+    badge.style.borderColor = 'rgba(243,178,24,0.4)';
+    if (activePin) {
+      display.textContent = activePin;
+      display.style.letterSpacing = '8px';
+      display.style.color = '#4caf50';
+      if (copyBtn) copyBtn.disabled = false;
+      if (newPinBtn) newPinBtn.disabled = false;
+    } else {
+      display.textContent = 'NO ACTIVE PIN';
+      display.style.letterSpacing = '2px';
+      display.style.fontSize = '18px';
+      display.style.color = '#aaa';
+      if (copyBtn) copyBtn.disabled = true;
+      if (newPinBtn) newPinBtn.disabled = false;
+    }
+  } else {
+    badge.textContent = 'NO PLAYER BOUND';
+    badge.style.color = '#888';
+    display.textContent = 'CLAIM IN STANDINGS';
+    display.style.letterSpacing = '1px';
+    display.style.fontSize = '16px';
+    display.style.color = '#888';
+    if (copyBtn) copyBtn.disabled = true;
+    if (newPinBtn) newPinBtn.disabled = true;
+  }
+}
+
+$('#btn-settings-copy-pin')?.addEventListener('click', async () => {
+  const display = $('#settings-pin-display');
+  const pin = display?.textContent?.trim();
+  if (pin && /^\d{6}$/.test(pin)) {
+    try {
+      await navigator.clipboard.writeText(pin);
+      toast('PIN ' + pin + ' copied to clipboard!');
+      feedback('saved');
+    } catch {
+      toast('Could not copy automatically. PIN is ' + pin);
+    }
+  }
+});
+
+$('#btn-settings-new-pin')?.addEventListener('click', async () => {
+  if (saving) return;
+  const myPlayerId = state?.myPlayerId;
+  if (!myPlayerId) {
+    toast('Tap your player name in Standings to claim your PIN first.', true);
+    return;
+  }
+  const btn = $('#btn-settings-new-pin');
+  btn.disabled = true;
+  try {
+    const res = await api('reveal-pin', { playerId: myPlayerId, forceReset: true });
+    if (res.pin) {
+      try {
+        localStorage.setItem('player-pin-' + myPlayerId, res.pin);
+      } catch {}
+      await refresh(false, true);
+      toast('New PIN generated: ' + res.pin);
+      feedback('saved');
+    }
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 $('#refresh').addEventListener('click', () => void refresh(true));
 $('#btn-reset-all-pins')?.addEventListener('click', async () => {
   if (saving) return;
@@ -1201,13 +1327,13 @@ $('#btn-reset-all-pins')?.addEventListener('click', async () => {
       keysToRemove.forEach((k) => localStorage.removeItem(k));
     } catch {}
     await refresh(false, true);
-    btn.textContent = 'Reset All PINs & Clear Local Cache';
+    btn.textContent = 'Reset PINs & Claims (Standings Safe)';
     btn.disabled = false;
     void hideSheet($('#settings-sheet'));
-    toast(res.message || 'All PINs and device locks have been cleared.');
+    toast(res.message || 'All PINs and device locks have been cleared. Standings preserved.');
   } catch (err) {
     btn.disabled = false;
-    btn.textContent = 'Reset All PINs & Clear Local Cache';
+    btn.textContent = 'Reset PINs & Claims (Standings Safe)';
     toast(err.message, true);
   }
 });

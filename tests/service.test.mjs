@@ -374,6 +374,20 @@ test('PIN generation binds to a single player per device and blocks claiming oth
   // Device B can generate PIN for bowdownbro
   const res2 = await deviceB('reveal-pin', { playerId: 'bowdownbro' });
   assert.equal(res2.status, 200);
+
+  // publicState exposes myPin only to the claiming owner
+  const stateA = await (await deviceA('state')).json();
+  const plA = stateA.players.find((p) => p.id === 'fiercekhan');
+  const plBInA = stateA.players.find((p) => p.id === 'bowdownbro');
+  assert.equal(plA.myPin, data1.pin);
+  assert.equal(plBInA.myPin, undefined);
+
+  // Reset all pins clears claims but preserves roster and standings
+  const resReset = await deviceA('reset-all-pins', {});
+  assert.equal(resReset.status, 200);
+  const stateAfterReset = await (await deviceA('state')).json();
+  assert.equal(stateAfterReset.players.length, stateA.players.length);
+  assert.equal(stateAfterReset.myPlayerId, null);
 });
 test('range parsing handles suffixes and rejects invalid/out-of-bounds requests', () => {
   assert.deepEqual(parseRange('bytes=-10', 100), {

@@ -686,12 +686,32 @@
         <p class="fine-print">
           Saved on this device. Video sound is controlled in the player.
         </p>
-        <div class="settings-admin-zone" style="margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div id="settings-pin-panel" class="settings-pin-panel" style="margin-top: 20px; padding: 16px; border-radius: 12px; background: rgba(243,178,24,0.06); border: 1px solid rgba(243,178,24,0.25);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <strong style="font-size: 13px; color: #f3b218; letter-spacing: 0.5px; text-transform: uppercase;">Your Active PIN</strong>
+            <span id="settings-pin-player-badge" class="pill" style="font-size: 10px; padding: 2px 8px;">Loading…</span>
+          </div>
+          <div id="settings-pin-content" style="text-align: center;">
+            <div id="settings-pin-display" style="font-family: monospace; font-size: 26px; font-weight: 700; letter-spacing: 6px; color: #fff; margin: 8px 0;">— — — — — —</div>
+            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
+              <button type="button" class="button button-dark button-sm" id="btn-settings-copy-pin" style="font-size: 11px;">
+                <span data-icon="copy"></span> Copy PIN
+              </button>
+              <button type="button" class="button button-outline button-sm" id="btn-settings-new-pin" style="font-size: 11px;">
+                <span data-icon="refresh"></span> Generate New PIN
+              </button>
+            </div>
+            <small class="fine-print" style="display: block; margin-top: 8px; font-size: 10px; color: #aaa;">
+              Saved securely on your device. Auto-cycles with a fresh PIN after every completed match.
+            </small>
+          </div>
+        </div>
+        <div class="settings-admin-zone" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08);">
           <button type="button" class="button button-outline button-sm" id="btn-reset-all-pins" style="width: 100%; border-color: rgba(243,178,24,0.4); color: #f3b218;">
-            Reset All PINs & Clear Local Cache
+            Reset PINs & Claims (Standings Safe)
           </button>
-          <small class="fine-print" style="display: block; text-align: center; margin-top: 6px;">
-            Clears device lockouts and resets PIN status so players can claim their PIN fresh.
+          <small class="fine-print" style="display: block; text-align: center; margin-top: 6px; color: #999;">
+            Clears device lockouts and resets PIN status. Standings, match scores, and history are never deleted.
           </small>
         </div>
       </div>

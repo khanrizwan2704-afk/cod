@@ -2052,6 +2052,35 @@
   width: 18px;
   height: 18px;
 }
+.charter-opponent-locked {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  opacity: 0.85;
+}
+.opponent-lock-badge svg {
+  width: 13px;
+  height: 13px;
+  color: #f3b218;
+}
+.match-status.half-agreed {
+  background: rgba(243, 178, 24, 0.15);
+  border-color: rgba(243, 178, 24, 0.4);
+  color: #f3b218;
+  animation: pulseWaiting 2s infinite ease-in-out;
+}
+.match-status.both-agreed {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #4caf50;
+}
+.card-waiting-opponent {
+  border-color: rgba(243, 178, 24, 0.35) !important;
+  box-shadow: 0 0 16px rgba(243, 178, 24, 0.08);
+}
+@keyframes pulseWaiting {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
 
 /* PIN Input Form in Charter Slot */
 .charter-pin-form {
